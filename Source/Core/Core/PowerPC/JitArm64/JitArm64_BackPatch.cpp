@@ -285,12 +285,15 @@ void JitArm64::EmitBackpatchRoutine(u32 flags, bool fastmem, bool do_farcode, AR
 
 bool JitArm64::HandleFault(uintptr_t access_address, SContext* ctx)
 {
+  UnWriteProtect();
+
   if (!IsInSpace((u8*)ctx->CTX_PC))
   {
     ERROR_LOG(DYNA_REC, "Backpatch location not within codespace 0x%016llx(0x%08x)", ctx->CTX_PC,
               Common::swap32(*(u32*)ctx->CTX_PC));
 
     DoBacktrace(access_address, ctx);
+    WriteProtect();
     return false;
   }
 
@@ -304,6 +307,7 @@ bool JitArm64::HandleFault(uintptr_t access_address, SContext* ctx)
               ctx->CTX_PC, access_address, (uintptr_t)Memory::physical_base);
 
     DoBacktrace(access_address, ctx);
+    WriteProtect();
     return false;
   }
 
@@ -312,11 +316,17 @@ bool JitArm64::HandleFault(uintptr_t access_address, SContext* ctx)
 
   // no fastmem area found
   if (slow_handler_iter == m_fault_to_handler.end())
+  {
+    WriteProtect();
     return false;
+  }
 
   // no overlapping fastmem area found
   if ((const u8*)ctx->CTX_PC - slow_handler_iter->first > slow_handler_iter->second.length)
+  {
+    WriteProtect();
     return false;
+  }
 
   ARM64XEmitter emitter((u8*)slow_handler_iter->first);
 
@@ -330,5 +340,6 @@ bool JitArm64::HandleFault(uintptr_t access_address, SContext* ctx)
 
   emitter.FlushIcache();
   ctx->CTX_PC = (u64)slow_handler_iter->first;
+  WriteProtect();
   return true;
 }

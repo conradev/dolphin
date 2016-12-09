@@ -2,13 +2,21 @@
 // Licensed under GPLv2+
 // Refer to the license.txt file included.
 
-#include "Core/PowerPC/JitArm64/Jit.h"
-#include "Common/CommonTypes.h"
 #include "Core/PowerPC/JitArm64/JitArm64Cache.h"
+#include "Common/CommonTypes.h"
+#include "Core/PowerPC/JitArm64/Jit.h"
 #include "Core/PowerPC/JitInterface.h"
+
+void JitArm64BlockCache::Init(Arm64Gen::ARM64CodeBlock* block)
+{
+  JitBaseBlockCache::Init();
+  m_block = block;
+}
 
 void JitArm64BlockCache::WriteLinkBlock(const JitBlock::LinkData& source, const JitBlock* dest)
 {
+  m_block->UnWriteProtect();
+
   u8* location = source.exitPtrs;
   ARM64XEmitter emit(location);
 
@@ -31,10 +39,14 @@ void JitArm64BlockCache::WriteLinkBlock(const JitBlock::LinkData& source, const 
     emit.B(jit->GetAsmRoutines()->dispatcher);
   }
   emit.FlushIcache();
+
+  m_block->WriteProtect();
 }
 
 void JitArm64BlockCache::WriteDestroyBlock(const JitBlock& block)
 {
+  m_block->UnWriteProtect();
+
   // Only clear the entry points as we might still be within this block.
   ARM64XEmitter emit((u8*)block.checkedEntry);
 
@@ -42,4 +54,6 @@ void JitArm64BlockCache::WriteDestroyBlock(const JitBlock& block)
     emit.BRK(0x123);
 
   emit.FlushIcache();
+
+  m_block->WriteProtect();
 }
