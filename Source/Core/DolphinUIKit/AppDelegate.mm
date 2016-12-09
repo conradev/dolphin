@@ -9,6 +9,11 @@
 #include "DolphinUIKit/ViewController.h"
 #include "UICommon/UICommon.h"
 
+extern "C" {
+#define PT_TRACE_ME 0
+int ptrace(int, pid_t, caddr_t, int);
+}
+
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication*)application
@@ -28,6 +33,27 @@
 
   SConfig::GetInstance().iCPUCore = PowerPC::MODE_INTERPRETER;
   NSLog(@"CPU: Using interpreter.");
+
+  auto core = PowerPC::CORE_INTERPRETER;
+#if __arm64__
+  // Fastmem is not available on iOS due to address space limits.
+  SConfig::GetInstance().bFastmem = false;
+  NSLog(@"CPU: Disabling fastmem.");
+
+  if (ptrace(PT_TRACE_ME, 0, 0, 0) == 0)
+  {
+    core = PowerPC::CORE_JITARM64;
+    NSLog(@"CPU: Using JIT ARM64.");
+  }
+  else
+  {
+    NSLog(@"CPU: Using Interpreter. (ptrace error: %d - %s)", errno, strerror(errno));
+  }
+#elif __x86_64__
+  core = PowerPC::CORE_JIT64;
+  NSLog(@"CPU: Using JIT 64.");
+#endif
+  SConfig::GetInstance().iCPUCore = core;
 
   SConfig::GetInstance().m_strVideoBackend = "OGL";
   // SConfig::GetInstance().m_strVideoBackend = "Null";
